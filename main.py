@@ -14,18 +14,45 @@ def main():
             break
 
 
-    files = [file for file in path.iterdir() if file.is_file()]
+    files = sorted([file for file in path.iterdir() if file.is_file()])
 
     if not files:
         print("Directory provided contains no files.")
         return
 
-    operations = select_operations()
+    while True:
+        operations = select_operations()
 
-    new_files = apply_operations(files, operations)
+        if not operations:
+            return
 
-    for file_path in new_files:
-        print(file_path.name)
+        file_changes = apply_operations(files, operations)
+
+        duplicate_paths = find_duplicate_paths(file_changes)
+        existing_path_conflicts = find_existing_path_conflicts(file_changes)
+
+        if duplicate_paths or existing_path_conflicts:
+            if duplicate_paths:
+                print("The following filenames have duplicates:")
+                for path in duplicate_paths:
+                    print(path.name)
+           
+            if existing_path_conflicts:
+                print("The following filenames already exist and will cause a conflict:")
+                for path in existing_path_conflicts:
+                    print(path.name)
+
+            try_again = ask_retry()
+            if not try_again:
+                return
+        else:
+            confirmation = preview_changes(file_changes)
+            if not confirmation:
+                continue
+            else:
+                break
+
+    rename_files(file_changes)
 
 
 def add_prefix(files, prefix):
@@ -85,7 +112,7 @@ def uppercase(files):
 def sequential_numbering(files, base, separator, digits, start):
     new_files = []
     i = int(start)
-    for file_path in sorted(files):
+    for file_path in files:
         new_file_path = file_path.parent / f"{base}{separator}{i:0{int(digits)}}{file_path.suffix}"
         new_files.append(new_file_path)
         i += 1
@@ -136,13 +163,97 @@ def select_operations():
 
 
 def apply_operations(files, operations):
+    original_files = files.copy()
+
     for operation in operations:
         function = operation[0]
         parameters = operation[1:]
 
         files = function(files, *parameters)
 
-    return files
+    file_changes = list(zip(original_files, files))
+
+    return file_changes
+
+
+def find_duplicate_paths(file_changes):
+    proposed_paths = set()
+    duplicate_paths = []
+
+    for file_change in file_changes:
+        if file_change[1] not in proposed_paths:
+            proposed_paths.add(file_change[1])
+        else:
+            if file_change[1] not in duplicate_paths:
+                duplicate_paths.append(file_change[1])
+
+    return duplicate_paths
+
+
+def find_existing_path_conflicts(file_changes):
+    original_paths = {original for original, proposed in file_changes}
+    conflicts = []
+
+    for file_change in file_changes:
+        proposed_path = file_change[1]
+
+        if proposed_path.exists() and proposed_path != file_change[0]:
+
+            if proposed_path not in original_paths:
+                if proposed_path not in conflicts:
+                    conflicts.append(proposed_path)
+
+            else:
+                for other_change in file_changes:
+                    if other_change[0] == proposed_path:
+                        if other_change[0] == other_change[1]:
+                            if proposed_path not in conflicts:
+                                conflicts.append(proposed_path)
+
+    return conflicts
+
+
+def ask_retry():
+    while True:
+        try_again = input("Would you like to try a different set of operations? (y/n): ").strip().lower()
+        if try_again in ("y", "yes"):
+            return True
+        elif try_again in ("n", "no"):
+            return False
+        else:
+            print("Please enter valid response (yes or no)")
+
+
+def preview_changes(file_changes):
+    print(f"{'Original filename':<30}", end="")
+    print(f"New filename")
+    print("-" * 60)
+    for file_change in file_changes:
+        print(f"{file_change[0].name:<30}", end="")
+        print(f"{file_change[1].name}")
+    while True:
+        confirmation = input("Would you like to carry on with these changes? (y/n): ").strip().lower()
+        if confirmation in ("y", "yes"):
+            return True
+        elif confirmation in ("n", "no"):
+            return False
+        else:
+            print("Please enter a valid input (yes or no)")
+
+
+def rename_files(file_changes):
+    i = 0
+    new_paths = []
+    for original, proposed in file_changes:
+        temp_file_path = original.parent / f"temp_file_{i}"
+        original.rename(temp_file_path)
+
+        new_paths.append((temp_file_path, proposed))
+
+        i += 1
+
+    for temp_path, proposed in new_paths:
+        temp_path.rename(proposed)
 
 
 if __name__ == '__main__':
