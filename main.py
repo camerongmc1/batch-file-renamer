@@ -1,4 +1,6 @@
 from pathlib import Path
+import tempfile
+
 
 def main():
     while True:
@@ -241,19 +243,28 @@ def preview_changes(file_changes):
             print("Please enter a valid input (yes or no)")
 
 
-def rename_files(file_changes):
-    i = 0
+def rename_files(file_changes):    
+    changing_files = [file_change for file_change in file_changes if file_change[0] != file_change[1]]
+
+    if not changing_files:
+        print("No files to change.")
+        return
+
+    temp_dir_path = Path(tempfile.mkdtemp(dir=changing_files[0][0].parent))
+
     new_paths = []
-    for original, proposed in file_changes:
-        temp_file_path = original.parent / f"temp_file_{i}"
+    for original, proposed in changing_files:
+        temp_file_path = temp_dir_path / original.name
         original.rename(temp_file_path)
 
         new_paths.append((temp_file_path, proposed))
 
-        i += 1
-
     for temp_path, proposed in new_paths:
         temp_path.rename(proposed)
+
+    temp_dir_path.rmdir()
+    
+    print("Files renamed successfully.")
 
 
 if __name__ == '__main__':
